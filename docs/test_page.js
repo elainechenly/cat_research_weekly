@@ -20,7 +20,9 @@ function makePage({ url = REAL_URL, fetchImpl } = {}) {
     JSON, RegExp, String,
   };
   vm.createContext(sandbox);
-  vm.runInContext(SCRIPT.replace("PASTE_YOUR_WEB_APP_URL_HERE", url), sandbox);
+  // vm.runInContext(SCRIPT.replace("PASTE_YOUR_WEB_APP_URL_HERE", url), sandbox);
+  vm.runInContext(SCRIPT.replace("https://script.google.com/macros/s/AKfycbwBQRifPe4PPHpEskqVlzlcPw7aPmycSzyivqXYYXkS9wAE6zPi2aMw3r0jZCLLh06m/exec", url), sandbox);
+
   return { els, calls, click: (id) => els[id].handlers.click() };
 }
 
