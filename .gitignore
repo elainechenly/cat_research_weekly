@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+.env
+.pytest_cache/
+# regenerated every run; not worth committing
+data/email_preview.html

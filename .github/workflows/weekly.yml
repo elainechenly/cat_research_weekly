@@ -1,0 +1,100 @@
+name: Weekly cat research digest
+
+on:
+  schedule:
+    # GitHub cron is UTC only. 16:00 UTC is Tuesday in Pacific time all year (8 am PST / 9 am PDT).
+    - cron: "0 16 * * 2"
+    # Backup run in case GitHub skips or the first run fails. It does nothing if this week was already sent.
+    - cron: "0 22 * * 2"
+    # The code (--scheduled) sends only on Tuesday (Pacific time), and only once per week.
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run (build everything, do NOT send email)"
+        type: boolean
+        default: true
+      force:
+        description: "Send even if this week was already sent"
+        type: boolean
+        default: false
+      start:
+        description: "Optional week start, YYYY-MM-DD (a Monday). Leave empty for last week."
+        type: string
+        default: ""
+      end:
+        description: "Optional week end, YYYY-MM-DD (a Sunday). Use together with start."
+        type: string
+        default: ""
+
+permissions:
+  contents: write        # lets the job commit the updated CSV back to the repo
+
+concurrency:
+  group: cat-weekly
+  cancel-in-progress: false
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run offline tests
+        run: python run_tests.py
+
+      - name: Run digest
+        env:
+          EVENT: ${{ github.event_name }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          FORCE: ${{ inputs.force }}
+          IN_START: ${{ inputs.start }}
+          IN_END: ${{ inputs.end }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          EMAIL_RECIPIENTS: ${{ secrets.EMAIL_RECIPIENTS }}
+          NCBI_API_KEY: ${{ secrets.NCBI_API_KEY }}
+        run: |
+          ARGS=()
+          if [ "$EVENT" = "schedule" ]; then
+            ARGS+=(--scheduled)
+          fi
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            if [ "$DRY_RUN" = "true" ]; then ARGS+=(--dry-run); fi
+            if [ "$FORCE" = "true" ]; then ARGS+=(--force); fi
+            if [ -n "$IN_START" ]; then ARGS+=(--start "$IN_START"); fi
+            if [ -n "$IN_END" ]; then ARGS+=(--end "$IN_END"); fi
+          fi
+          python -m cat_weekly.main "${ARGS[@]}"
+
+      - name: Commit updated data
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data
+          if git diff --cached --quiet; then
+            echo "No data changes to commit."
+          else
+            git commit -m "Weekly update $(date -u +%F)"
+            git pull --rebase
+            git push
+          fi
+
+      - name: Save email preview
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: email-preview
+          path: data/email_preview.html
+          if-no-files-found: ignore
+          retention-days: 14
