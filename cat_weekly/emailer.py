@@ -119,7 +119,16 @@ def _card(p, zh):
     return "".join(parts)
 
 
-def build_email(papers, start, end, include_mandarin=None):
+def _unsub_html(url, zh):
+    u = esc(url)
+    out = ('<p style="font-size:12px;color:#718096;margin-top:24px">You are receiving this email because you '
+           f'subscribed to Cat Research Weekly. <a href="{u}" style="color:#2b6cb0">Unsubscribe</a>')
+    if zh:
+        out += (f'<br><span lang="zh">您收到此邮件是因为订阅了猫咪研究周报。<a href="{u}" style="color:#2b6cb0">取消订阅</a></span>')
+    return out + "</p>"
+
+
+def build_email(papers, start, end, include_mandarin=None, unsubscribe_url=None):
     """Return (subject, html_body, text_body). Verified papers first, unchecked ones under 'Additional Reading'."""
     zh = config.EMAIL_INCLUDE_MANDARIN if include_mandarin is None else include_mandarin
     verified, extra = _split(papers)
@@ -162,25 +171,59 @@ def build_email(papers, start, end, include_mandarin=None):
         h.append("</ul>")
         t.append("")
 
+    if unsubscribe_url:                                  # personal link, placed above the disclaimer
+        h.append(_unsub_html(unsubscribe_url, zh))
+        t += ["", f"Unsubscribe: {unsubscribe_url}"] + ([f"取消订阅：{unsubscribe_url}"] if zh else [])
     h.append(_notice_html(zh) + "</div></body></html>")
     t += _notice_text(zh)
     return subject, "".join(h), "\n".join(t)
 
 
-def send_email(subject, html_body, text_body, recipients, user, app_password,
-               host=None, port=None, smtp_factory=smtplib.SMTP_SSL):
-    """Send one message. Recipients are BCC'd (envelope only), so nobody sees anyone else's address."""
-    if not recipients:
-        raise ValueError("No recipients given.")
+def _make_message(subject, html_body, text_body, user, to, unsubscribe_url=None):
     msg = EmailMessage()
     msg["Subject"] = subject
     msg["From"] = formataddr(("Weekly Cat Research", user))
-    msg["To"] = formataddr(("Weekly Cat Research", user))
+    msg["To"] = to
     msg["Date"] = formatdate(localtime=True)
+    if unsubscribe_url:                                   # lets Gmail/Outlook show their own "Unsubscribe" button
+        msg["List-Unsubscribe"] = f"<{unsubscribe_url}>"
     msg.set_content(text_body)
     msg.add_alternative(html_body, subtype="html")
+    return msg
+
+
+def send_email(subject, html_body, text_body, recipients, user, app_password,
+               host=None, port=None, smtp_factory=smtplib.SMTP_SSL):
+    """Send ONE message. Recipients are BCC'd (envelope only), so nobody sees anyone else's address."""
+    if not recipients:
+        raise ValueError("No recipients given.")
+    msg = _make_message(subject, html_body, text_body, user, to=formataddr(("Weekly Cat Research", user)))
     with smtp_factory(host or config.SMTP_HOST, port or config.SMTP_PORT,
                       context=ssl.create_default_context()) as s:
         s.login(user, app_password)
         s.send_message(msg, from_addr=user, to_addrs=list(recipients))
     return msg
+
+
+def send_to_subscribers(papers, start, end, recipients, user, app_password,
+                        host=None, port=None, smtp_factory=smtplib.SMTP_SSL, include_mandarin=None):
+    """Send each recipient their OWN email (with their personal unsubscribe link).
+
+    recipients: list of {"email": ..., "unsubscribe_url": ...}. One bad address does not stop the others.
+    Returns (sent_emails, failed) where failed is a list of (email, reason).
+    """
+    if not recipients:
+        raise ValueError("No recipients given.")
+    sent, failed = [], []
+    with smtp_factory(host or config.SMTP_HOST, port or config.SMTP_PORT,
+                      context=ssl.create_default_context()) as s:
+        s.login(user, app_password)
+        for r in recipients:
+            subject, h, t = build_email(papers, start, end, include_mandarin, unsubscribe_url=r.get("unsubscribe_url"))
+            msg = _make_message(subject, h, t, user, to=r["email"], unsubscribe_url=r.get("unsubscribe_url"))
+            try:
+                s.send_message(msg, from_addr=user, to_addrs=[r["email"]])
+                sent.append(r["email"])
+            except (smtplib.SMTPException, OSError) as e:
+                failed.append((r["email"], str(e)))
+    return sent, failed

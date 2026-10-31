@@ -11,7 +11,7 @@ import os
 import sys
 from datetime import date
 
-from . import config, csv_out, emailer, gate, pubmed, state, summarize
+from . import config, csv_out, emailer, gate, pubmed, state, subscribers, summarize
 
 
 def run(start=None, end=None, dry_run=False, today=None, force=False):
@@ -47,13 +47,24 @@ def run(start=None, end=None, dry_run=False, today=None, force=False):
 
     user = os.environ.get("GMAIL_USER", "")
     password = os.environ.get("GMAIL_APP_PASSWORD", "")
-    recipients = emailer.parse_recipients(os.environ.get("EMAIL_RECIPIENTS", ""))
-    if not (user and password and recipients):
-        raise RuntimeError("Missing GMAIL_USER, GMAIL_APP_PASSWORD or EMAIL_RECIPIENTS.")
-    emailer.send_email(subject, html_body, text_body, recipients, user, password)
+    if not (user and password):
+        raise RuntimeError("Missing GMAIL_USER or GMAIL_APP_PASSWORD.")
+    static = emailer.parse_recipients(os.environ.get("EMAIL_RECIPIENTS", ""))
+    recipients = subscribers.merge_recipients(subscribers.fetch_subscribers(), static, config.SUBSCRIBE_PAGE_URL)
+    if not recipients:
+        print("No subscribers and no EMAIL_RECIPIENTS: nothing to send (the week is not marked as sent).")
+        return result
+    if len(recipients) > 400:
+        print(f"Warning: {len(recipients)} recipients; Gmail allows roughly 500 messages per day.")
+    sent, failed = emailer.send_to_subscribers(papers, start, end, recipients, user, password)
+    for email, reason in failed:
+        print(f"  Could not send to {email}: {reason}")
+    if not sent:
+        raise RuntimeError("The email could not be sent to any recipient.")
     state.mark_sent(start, end)
     result["sent"] = True
-    print(f"Email sent to {len(recipients)} recipient(s).")
+    result["sent_count"], result["failed_count"] = len(sent), len(failed)
+    print(f"Email sent to {len(sent)} recipient(s)" + (f"; {len(failed)} failed." if failed else "."))
     return result
 
 

@@ -117,3 +117,60 @@ def test_send_requires_recipients():
         assert False
     except ValueError:
         pass
+
+
+def test_unsubscribe_link_is_in_html_and_text_above_the_disclaimer():
+    url = "https://script.google.com/macros/s/ABC/exec?action=unsubscribe&token=tok"
+    _, h, t = emailer.build_email([verified()], START, END, unsubscribe_url=url)
+    assert "action=unsubscribe&amp;token=tok" in h and f"Unsubscribe: {url}" in t and "取消订阅" in h
+    assert h.index("Unsubscribe</a>") < h.index("Disclaimer &amp; Copyright Notice")
+
+
+def test_no_unsubscribe_block_when_no_url():
+    _, h, t = emailer.build_email([verified()], START, END)
+    assert "Unsubscribe" not in h and "Unsubscribe" not in t
+
+
+def _fake_smtp():
+    smtp = mock.MagicMock()
+    smtp.__enter__.return_value = smtp
+    return smtp, mock.MagicMock(return_value=smtp)
+
+
+def test_each_subscriber_gets_their_own_email_with_their_own_link():
+    smtp, factory = _fake_smtp()
+    recips = [{"email": "a@x.com", "unsubscribe_url": "https://u/exec?action=unsubscribe&token=A"},
+              {"email": "b@y.org", "unsubscribe_url": "https://u/exec?action=unsubscribe&token=B"}]
+    sent, failed = emailer.send_to_subscribers([verified()], START, END, recips, "me@gmail.com", "pw", smtp_factory=factory)
+    assert sent == ["a@x.com", "b@y.org"] and failed == []
+    assert smtp.login.call_count == 1 and smtp.send_message.call_count == 2
+    first, second = (c.args[0] for c in smtp.send_message.call_args_list)
+    assert first["To"] == "a@x.com" and second["To"] == "b@y.org"          # nobody sees anyone else
+    assert "token=A" in first.as_string() and "token=B" not in first.as_string()
+    assert first["List-Unsubscribe"] == "<https://u/exec?action=unsubscribe&token=A>"
+    assert smtp.send_message.call_args_list[0].kwargs["to_addrs"] == ["a@x.com"]
+
+
+def test_one_rejected_address_does_not_stop_the_rest():
+    import smtplib
+    smtp, factory = _fake_smtp()
+    smtp.send_message.side_effect = [smtplib.SMTPRecipientsRefused({"bad@x.com": (550, b"no")}), None]
+    recips = [{"email": "bad@x.com", "unsubscribe_url": None}, {"email": "good@x.com", "unsubscribe_url": None}]
+    sent, failed = emailer.send_to_subscribers([verified()], START, END, recips, "me@gmail.com", "pw", smtp_factory=factory)
+    assert sent == ["good@x.com"] and failed[0][0] == "bad@x.com"
+
+
+def test_static_recipient_without_link_gets_no_unsubscribe_header():
+    smtp, factory = _fake_smtp()
+    emailer.send_to_subscribers([verified()], START, END, [{"email": "a@x.com", "unsubscribe_url": None}],
+                                "me@gmail.com", "pw", smtp_factory=factory)
+    msg = smtp.send_message.call_args.args[0]
+    assert msg["List-Unsubscribe"] is None
+
+
+def test_send_to_subscribers_requires_recipients():
+    try:
+        emailer.send_to_subscribers([], START, END, [], "me@gmail.com", "pw")
+        assert False
+    except ValueError:
+        pass

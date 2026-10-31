@@ -32,3 +32,8 @@ def test_permissions_and_no_overlapping_runs():
 
 def test_dry_runs_do_not_commit():
     assert "inputs.dry_run" in WF[WF.index("Commit updated data"):]
+
+
+def test_subscriber_secrets_and_apps_script_tests_are_wired():
+    assert "secrets.SUBSCRIBERS_URL" in WF and "secrets.SUBSCRIBERS_API_KEY" in WF
+    assert "node apps_script/test_code.js" in WF and "node docs/test_page.js" in WF

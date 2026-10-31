@@ -48,3 +48,8 @@ SMTP_PORT = 465
 # --- Weekly schedule (used by --scheduled; GitHub cron only knows UTC, so the code checks the Pacific weekday) ---
 SEND_TZ = "America/Los_Angeles"
 SEND_WEEKDAY = 1          # Monday = 0, Tuesday = 1. A scheduled run sends only on this weekday (Pacific time).
+
+# --- Subscribers (Google Sheet + Apps Script, see apps_script/) ---
+# Public address of the sign-up page (GitHub Pages). Used as the unsubscribe link for people who are not on the sheet.
+SUBSCRIBE_PAGE_URL = os.environ.get("SUBSCRIBE_PAGE_URL", "https://elainechenly.github.io/cat_research_weekly/")
+# Secrets read from the environment: SUBSCRIBERS_URL (the Apps Script web app URL ending in /exec) and SUBSCRIBERS_API_KEY.

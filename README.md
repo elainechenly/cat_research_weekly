@@ -17,6 +17,9 @@ PubMed search (last full Mon-Sun week)  ->  Gemini: keep cat papers, write summa
 | `cat_weekly/csv_out.py` | Step 3: master CSV (`data/cat_papers_all.csv`), no duplicates |
 | `cat_weekly/emailer.py` | Step 4: HTML + text email, Gmail SMTP |
 | `cat_weekly/gate.py`, `state.py` | Tuesday (Pacific time) check, and "already sent this week" memory |
+| `cat_weekly/subscribers.py` | Reads the confirmed subscriber list from the Google Sheet |
+| `apps_script/Code.gs` | Subscription backend (Google Apps Script), with offline tests in `test_code.js` |
+| `docs/index.html` | Public sign-up / cancel page (GitHub Pages), tests in `test_page.js` |
 | `cat_weekly/main.py` | Runs everything. `--dry-run`, `--scheduled`, `--force`, `--start/--end` |
 | `.github/workflows/weekly.yml` | The weekly GitHub Actions job |
 | `tests/`, `run_tests.py` | Offline tests (`python run_tests.py`, or `pytest`) |
@@ -28,7 +31,8 @@ Edit `cat_weekly/config.py`: journals, keywords, Gemini model, whether the email
 
 ## GitHub setup
 1. Repository **Settings -> Secrets and variables -> Actions -> New repository secret**. Add:
-   `GEMINI_API_KEY`, `GMAIL_USER`, `GMAIL_APP_PASSWORD`, `EMAIL_RECIPIENTS` (comma or newline separated).
+   `GEMINI_API_KEY`, `GMAIL_USER`, `GMAIL_APP_PASSWORD`, `EMAIL_RECIPIENTS` (comma or newline separated; extra addresses
+   on top of the subscriber list), and, once the sign-up page is set up, `SUBSCRIBERS_URL` and `SUBSCRIBERS_API_KEY`.
    Optional: `NCBI_API_KEY`.
 2. **Settings -> Actions -> General -> Workflow permissions**: choose *Read and write permissions*.
 3. **Actions** tab -> *Weekly cat research digest* -> **Run workflow**. Leave *Dry run* ticked first.
@@ -39,6 +43,10 @@ Edit `cat_weekly/config.py`: journals, keywords, Gemini model, whether the email
 The workflow starts every Tuesday at 16:00 UTC (always Tuesday in Pacific time, 8 am PST / 9 am PDT) and again at
 22:00 UTC as a backup. A scheduled run sends only on Tuesday in Los Angeles, and only once per week: the backup run
 does nothing if the first one already sent, but retries if the first one failed.
+
+## Subscribers
+People sign up on the GitHub Pages site; a Google Sheet + Apps Script handles confirmation and cancellation, and
+each subscriber receives their own email with a personal unsubscribe link. Setup: see `SUBSCRIBE_SETUP.md`.
 
 ## Secrets and privacy
 Passwords and the recipient list live only in GitHub secrets. Never commit them. The CSV contains only public
