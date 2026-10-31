@@ -39,13 +39,8 @@ Edit `cat_weekly/config.py`: journals, keywords, Gemini model, whether the email
    Open the run and download the `email-preview` artifact to see the email without sending it.
 4. Untick *Dry run* for a real send. Tick *Force* to send again for a week already sent.
 
-## Schedule
-The workflow starts every Tuesday at 16:00 UTC (always Tuesday in Pacific time, 8 am PST / 9 am PDT) and again at
-22:00 UTC as a backup. A scheduled run sends only on Tuesday in Los Angeles, and only once per week: the backup run
-does nothing if the first one already sent, but retries if the first one failed.
-
 ## Subscribers
-People sign up on the GitHub Pages site; a Google Sheet + Apps Script handles confirmation and cancellation, and
+People sign up on the GitHub Pages site: https://elainechenly.github.io/cat_research_weekly/ ; a Google Sheet + Apps Script handles confirmation and cancellation, and
 each subscriber receives their own email with a personal unsubscribe link. Setup: see `SUBSCRIBE_SETUP.md`.
 
 ## Secrets and privacy
